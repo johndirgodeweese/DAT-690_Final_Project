@@ -125,17 +125,64 @@ sal_dataV1[,factor_cols] <- lapply(sal_dataV1[,factor_cols], factor, ordered= TR
 # Get rid of the EMPID field because it is worthless
 sal_dataV1 <- subset(sal_dataV1, select = -c(EMPID))
 
-# For our correlation check, remove DiffFromSalary and AnnualIncomeNeeded
-# They are literally mathematically related - one is the target variable and the
-# other is the difference between the current salary and the target variable
-sal_dataV1 <- subset(sal_dataV1, select = -c(AnnualIncomeNeeded,DiffFromSalary))
+####################################################################
+# OK, now that we've done this, let's start doing some modification and analysis
+# First, let's convert the factors to factors...
+factor_cols <- c("Education", "EnvironmentSatisfaction", "JobInvolvement",
+                 "JobLevel", "JobSatisfaction", "PerformanceRating", 
+                 "RelationshipSatisfaction","StockOption","WorkLifeBalance")
+sal_dataV1[,factor_cols] <- lapply(sal_dataV1[,factor_cols], factor, ordered= TRUE)
+#####################################################################
+sal_dataV1$AvgTimePerCompany <- round((sal_dataV1$TotalWorkingYears/(sal_dataV1$NumCompaniesWorked+1)),2)
+
+sal_dataV1$CompanyPercentOfCareer <- ifelse(sal_dataV1$TotalWorkingYears == 0, 0, round(((sal_dataV1$YearsAtCompany/sal_dataV1$TotalWorkingYears)*100),2))
+
+sal_dataV1$CurRolePercent <- ifelse(sal_dataV1$YearsAtCompany == 0, 0, round(((sal_dataV1$YearsInCurrentRole/sal_dataV1$YearsAtCompany)*100),2))
+
+sal_dataV1$CurMgrPercent <- ifelse(sal_dataV1$YearsAtCompany == 0, 0, round(((sal_dataV1$YearsWithCurrManager/sal_dataV1$YearsAtCompany)*100),2))
+
+sal_dataV1$NoPromoPercent <- ifelse(sal_dataV1$YearsAtCompany == 0, 0, round(((sal_dataV1$YearsSinceLastPromotion/sal_dataV1$YearsAtCompany)*100),2))
+
+sal_dataV1$RetentionPercentNeeded <- round(((sal_dataV1$DiffFromSalary/sal_dataV1$CurrentSalary)*100),2)
+
+# For our correlation check, remove DiffFromSalary (but keep RetentionPercentNeeded, for now)
+sal_dataV1 <- subset(sal_dataV1, select = -c(DiffFromSalary))
 
 # Eliminate AGE because 1) multicollinearity with TotalWorkingYears, etc and
 # Also HUGE bias risk
 sal_dataV1 <- subset(sal_dataV1, select = -c(Age))
 
+# Let's take a quick peek at the data, including distributions
+skim(sal_dataV1)
+
+# Now let's look at the variables with near zero variance
+zeroVarVariables <- nearZeroVar(sal_dataV1)
+
+# Show the names of the columns without variability (not useful for modeling)
+colnames(sal_dataV1[zeroVarVariables])
+
 # Extract the numeric variables names
 numeric_cols <- names(sal_dataV1)[sapply(sal_dataV1, is.numeric)]
+
+################################################################
+# Create a Z-Score like standardization routine for the numeric
+# attributes
+#
+# <new x> = (<old x> - <mean X>)/ <std dev x>
+# 
+###############################################################
+
+data_standardize <- function(x, na.rm= TRUE) {
+  return((x - mean(x))/sd(x))
+}
+
+# First let's NOT standardize the salary because that has actual meaning
+for(looper in numeric_cols) {
+  if(looper != 'CurrentSalary' && looper!='AnnualIncomeNeeded')
+    {
+    sal_dataV1[[looper]] <- data_standardize(sal_dataV1[[looper]]) 
+  }
+}
 
 # Create a numeric variable dataframe from the main dataframe
 sal_num_DF <- sal_dataV1[numeric_cols]
@@ -149,6 +196,36 @@ sal_num_pval <- cor_pmat(sal_num_DF)
 
 # Correlation Plot!
 ggcorrplot(sal_num_corr, hc.order=TRUE, type="lower", lab=TRUE, p.mat=sal_num_pval)
+
+target_var <- 'AnnualIncomeNeeded'
+
+# Get a list of the numeric variable names without the target variable
+# This will be used for the VIF and Stepwise AIC function
+
+num_cols_no_target <- colnames(sal_num_DF)
+num_cols_no_target <- num_cols_no_target[!num_cols_no_target %in% c('AnnualIncomeNeeded','RetentionPercentNeeded')]
+
+# Build the complete formula
+salLMformula <- as.formula(paste(target_var,paste(num_cols_no_target, collapse = " + "), sep = " ~"))
+
+# Display the formula
+print(salLMformula)
+
+# Perform VIF evalation (Variance Inflation Factor)
+VIF_evaluation <- vif(lm(salLMformula, data=sal_dataV1))
+
+# Determine the attribute with the highest VIF value
+highest_VIF_location <- which.max(VIF_evaluation)
+highest_VIF_index_loc <- highest_VIF_location[1]
+highest_VIF_name <- names(highest_VIF_location)
+
+# Now perform the stepwise regression to see which set of attributes
+# gives the lowest AIC (Akaike Information Criteria)
+# AIC = mathematical evaluation of how well the data fits the model used
+#       to generate the model
+
+stepwiseR <- stepAIC(lm(salLMformula,data=sal_dataV1))
+summary(stepwiseR)
 
 ###################################################################
 # Categorical Variable Independence Check!
