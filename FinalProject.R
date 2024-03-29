@@ -15,6 +15,10 @@ setwd("G:/My Drive/24TW3 - DAT 690 - Capstone in Data Analytics/DAT-690 Final Pr
 library(tidyverse)
 library(rsample)    # data splitting 
 library(smotefamily)       # SMOTE & Adasyn for balancing datasets
+library(e1071)
+library(stats)
+library(mltools)
+library(data.table)
 
 
 # Data Validator
@@ -30,6 +34,7 @@ library(skimr)
 # Machine Learning
 library(neuralnet)
 library(NeuralNetTools)
+library(keras3)
 
 
 # Training/Testing Dataset Split
@@ -115,24 +120,29 @@ summary(rule_check)
 # MAKE A BACKUP COPY!!!
 sal_dataV1_backup <- sal_dataV1
 
-# OK, now that we've done this, let's start doing some modification and analysis
-# First, let's convert the factors to factors...
-factor_cols <- c("Education", "EnvironmentSatisfaction", "JobInvolvement",
-                 "JobLevel", "JobSatisfaction", "PerformanceRating", 
-                 "RelationshipSatisfaction","StockOption","WorkLifeBalance")
-sal_dataV1[,factor_cols] <- lapply(sal_dataV1[,factor_cols], factor, ordered= TRUE)
-
 # Get rid of the EMPID field because it is worthless
 sal_dataV1 <- subset(sal_dataV1, select = -c(EMPID))
 
 ####################################################################
 # OK, now that we've done this, let's start doing some modification and analysis
 # First, let's convert the factors to factors...
+
 factor_cols <- c("Education", "EnvironmentSatisfaction", "JobInvolvement",
                  "JobLevel", "JobSatisfaction", "PerformanceRating", 
                  "RelationshipSatisfaction","StockOption","WorkLifeBalance")
 sal_dataV1[,factor_cols] <- lapply(sal_dataV1[,factor_cols], factor, ordered= TRUE)
+
 #####################################################################
+# Now Create Some New Attributes That are More Useful
+# Average Time Per Company = Total Working Years /(Number Companies Worked + 1)
+#             Apparently 'Number of Companies Worked' doesn't include this one
+# Company Percent of Career = Years at Company / Total Working Years
+# Current Role Percent = Years in Current Role / Years at Company
+# Current Manager Percent = Years with Current Manager / Years at Company
+# Percent Since Last Promotion = Years since Last Promotion / Year at Company
+# Retention Percent Needed = Amount of Salary Change Needed / Current Salary
+#####################################################################
+
 sal_dataV1$AvgTimePerCompany <- round((sal_dataV1$TotalWorkingYears/(sal_dataV1$NumCompaniesWorked+1)),2)
 
 sal_dataV1$CompanyPercentOfCareer <- ifelse(sal_dataV1$TotalWorkingYears == 0, 0, round(((sal_dataV1$YearsAtCompany/sal_dataV1$TotalWorkingYears)*100),2))
@@ -144,6 +154,7 @@ sal_dataV1$CurMgrPercent <- ifelse(sal_dataV1$YearsAtCompany == 0, 0, round(((sa
 sal_dataV1$NoPromoPercent <- ifelse(sal_dataV1$YearsAtCompany == 0, 0, round(((sal_dataV1$YearsSinceLastPromotion/sal_dataV1$YearsAtCompany)*100),2))
 
 sal_dataV1$RetentionPercentNeeded <- round(((sal_dataV1$DiffFromSalary/sal_dataV1$CurrentSalary)*100),2)
+
 
 # For our correlation check, remove DiffFromSalary (but keep RetentionPercentNeeded, for now)
 sal_dataV1 <- subset(sal_dataV1, select = -c(DiffFromSalary))
@@ -161,8 +172,12 @@ zeroVarVariables <- nearZeroVar(sal_dataV1)
 # Show the names of the columns without variability (not useful for modeling)
 colnames(sal_dataV1[zeroVarVariables])
 
-# Extract the numeric variables names
-numeric_cols <- names(sal_dataV1)[sapply(sal_dataV1, is.numeric)]
+# In this case, there are none so retain all the attributes
+
+###############################################################
+# Make copy of entire database for normalization
+###############################################################
+train_sal_data <- sal_dataV1
 
 ################################################################
 # Create a Z-Score like standardization routine for the numeric
@@ -172,27 +187,41 @@ numeric_cols <- names(sal_dataV1)[sapply(sal_dataV1, is.numeric)]
 # 
 ###############################################################
 
+# Extract the numeric variables names
+numeric_cols <- names(sal_dataV1)[sapply(sal_dataV1, is.numeric)]
+
+# 
 data_standardize <- function(x, na.rm= TRUE) {
   return((x - mean(x))/sd(x))
 }
 
-# First let's NOT standardize the salary because that has actual meaning
+# First let's NOT standardize the salary or the target variable because 
+# they are money and have actual meaning
 for(looper in numeric_cols) {
-  if(looper != 'CurrentSalary' && looper!='AnnualIncomeNeeded')
-    {
-    sal_dataV1[[looper]] <- data_standardize(sal_dataV1[[looper]]) 
+  if(looper != 'CurrentSalary' && looper!='AnnualIncomeNeeded') {
+    # Create a new name for the created standardized column    
+    newcol_name <- paste(looper,"Std", sep="_")
+    # Create a vector containing the standardized values
+    new_vector <- data_standardize(sal_dataV1[[looper]])
+    # Add the vector to the dataframe
+    train_sal_data <- cbind(train_sal_data,new_vector)
+    # Rename the column
+    colnames(train_sal_data)[which(names(train_sal_data) == "new_vector")] <- newcol_name
+    # Remove the old non-standardized data (NEW DATAFRAME ONLY)
+    train_sal_data <- train_sal_data[, names(train_sal_data) != looper]
   }
 }
 
-# Create a numeric variable dataframe from the main dataframe
-sal_num_DF <- sal_dataV1[numeric_cols]
+# Create a numeric variable dataframe from the modeling dataframe
+new_numeric_cols <- names(train_sal_data)[sapply(train_sal_data, is.numeric)]
 
-# Create a categorical variable dataframe from the main dataframe
-sal_cat_DF <- sal_dataV1[factor_cols]
+# nDF at the end indicates numeric dataframe
+train_sal_data_nDF <- train_sal_data[new_numeric_cols]
+
 
 # Let's set up for correlation plots!
-sal_num_corr <- round(cor(sal_num_DF),2)
-sal_num_pval <- cor_pmat(sal_num_DF)
+sal_num_corr <- round(cor(train_sal_data_nDF),2)
+sal_num_pval <- cor_pmat(train_sal_data_nDF)
 
 # Correlation Plot!
 ggcorrplot(sal_num_corr, hc.order=TRUE, type="lower", lab=TRUE, p.mat=sal_num_pval)
@@ -202,8 +231,8 @@ target_var <- 'AnnualIncomeNeeded'
 # Get a list of the numeric variable names without the target variable
 # This will be used for the VIF and Stepwise AIC function
 
-num_cols_no_target <- colnames(sal_num_DF)
-num_cols_no_target <- num_cols_no_target[!num_cols_no_target %in% c('AnnualIncomeNeeded','RetentionPercentNeeded')]
+num_cols_no_target <- colnames(train_sal_data_nDF)
+num_cols_no_target <- num_cols_no_target[!num_cols_no_target %in% c('AnnualIncomeNeeded','RetentionPercentNeeded_Std')]
 
 # Build the complete formula
 salLMformula <- as.formula(paste(target_var,paste(num_cols_no_target, collapse = " + "), sep = " ~"))
@@ -212,7 +241,7 @@ salLMformula <- as.formula(paste(target_var,paste(num_cols_no_target, collapse =
 print(salLMformula)
 
 # Perform VIF evalation (Variance Inflation Factor)
-VIF_evaluation <- vif(lm(salLMformula, data=sal_dataV1))
+VIF_evaluation <- vif(lm(salLMformula, data=train_sal_data_nDF))
 
 # Determine the attribute with the highest VIF value
 highest_VIF_location <- which.max(VIF_evaluation)
@@ -224,18 +253,32 @@ highest_VIF_name <- names(highest_VIF_location)
 # AIC = mathematical evaluation of how well the data fits the model used
 #       to generate the model
 
-stepwiseR <- stepAIC(lm(salLMformula,data=sal_dataV1))
+stepwiseR <- stepAIC(lm(salLMformula,data=train_sal_data_nDF))
 summary(stepwiseR)
+
+###
+# Save the AIC selected features
+###
+coefficients <- coef(stepwiseR)
+# Ignore intercept (that's why it starts at 2)
+selected_features <- names(coefficients)[coefficients != 0][2:length(coefficients)]
 
 ###################################################################
 # Categorical Variable Independence Check!
 ###################################################################
+# Create a categorical variable dataframe from the modeling dataframe
+new_factor_cols <- names(train_sal_data)[sapply(train_sal_data, is.factor)]
+
+# fDF at the end indicates factor dataframe
+train_sal_data_fDF <- train_sal_data[new_factor_cols]
+
+
 # Now combine them into every possible set of pairs
-factor_pairs <- combn(factor_cols,2)
+factor_pairs <- combn(new_factor_cols,2)
 
 # Create a function that performs the chi-squared test of independence for a pair of variables
 CategoricalIndependenceTest <- function(var1, var2) {
-  ContingencyTable <- table(sal_cat_DF[[var1]], sal_cat_DF[[var2]])
+  ContingencyTable <- table(train_sal_data_fDF[[var1]], train_sal_data_fDF[[var2]])
   Chi_squared_result <- chisq.test(ContingencyTable)
   return(list(Variable1 = var1, Variable2 = var2, 
               ChiSquaredStatistic = Chi_squared_result$statistic, 
@@ -273,4 +316,39 @@ DependentVariables <- IndTestResults_df[IndTestResults_df$Ind_Test_PVal <= 0.05,
 
 # Look at the Dependent ones
 View(DependentVariables)
+
+# Since JobLevel appear in both of the dependent pairs, remove it
+new_factor_cols <- new_factor_cols[!new_factor_cols %in% c('JobLevel')]
+
+# Convert the data frame into a data table
+train_sal_data_DT <- data.table(train_sal_data)
+
+# ML tools? one_hot?
+train_sal_data_DT <- one_hot(train_sal_data_DT, cols=new_factor_cols, dropCols = TRUE)
+
+# Build final training database
+# Assembled from the attributes chosen in the stepwise regression (for numerics)
+# and the independence check (categoricals)
+train_db_field_list <- c("AnnualIncomeNeeded",selected_features,new_factor_cols)
+
+train_final_db <- train_sal_data[,c(train_db_field_list)]
+
+# Convert the data frame into a data table
+train_final_db <- data.table(train_final_db)
+
+# Run the one-hot encoding on the factor columns
+train_final_db <- one_hot(train_final_db, cols=new_factor_cols, dropCols = TRUE)
+
+# Let's try a basic linear regression model
+train_linear_reg <- lm(AnnualIncomeNeeded ~ ., data = train_final_db)
+
+# Let's try a GLM model
+train_glm <- glm(AnnualIncomeNeeded ~ ., data = train_final_db, family = gaussian)
+
+# Let's do a basic neural network
+train_nn <- neuralnet(AnnualIncomeNeeded ~ ., data = train_final_db, 
+                      hidden = c(10, 5), linear.output = FALSE)
+
+# Plot that bad boy out!
+plot(train_nn,rep="best")
 
