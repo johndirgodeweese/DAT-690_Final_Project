@@ -104,6 +104,9 @@ rules <- validator(CheckNA = !is.na(sal_dataV1),
                    CheckPerfRating = in_range(sal_dataV1$PerformanceRating, min = 1, max = 4),
                    CheckRelSatis = in_range(sal_dataV1$RelationshipSatisfaction, min = 1, max = 4),
                    CheckWorkLife = in_range(sal_dataV1$WorkLifeBalance, min = 1, max = 4),
+                   CheckStockOpt = in_range(sal_dataV1$StockOption, min = 0, max =3),
+                   CheckJobLevel = in_range(sal_dataV1$JobLevel, min = 1, max = 5),
+                   CheckEnvSatis = in_range(sal_dataV1$EnvironmentSatisfaction, min = 1, max = 4),
                    CheckAvgOT = in_range(sal_dataV1$AvgOverTime, min = 0, max = 40),
                    CheckTotWorkVsCompany = sal_dataV1$YearsAtCompany <= sal_dataV1$TotalWorkingYears,
                    CheckYrsCompVsCurRole = sal_dataV1$YearsAtCompany >= sal_dataV1$YearsInCurrentRole,
@@ -129,7 +132,68 @@ sal_dataV1 <- subset(sal_dataV1, select = -c(EMPID))
 factor_cols <- c("Education", "EnvironmentSatisfaction", "JobInvolvement",
                  "JobLevel", "JobSatisfaction", "PerformanceRating", 
                  "RelationshipSatisfaction","StockOption","WorkLifeBalance")
-sal_dataV1[,factor_cols] <- lapply(sal_dataV1[,factor_cols], factor, ordered= TRUE)
+
+#sal_dataV1[,factor_cols] <- lapply(sal_dataV1[,factor_cols], factor, ordered= TRUE)
+
+sal_dataV1$Education <- factor(sal_dataV1$Education, 
+                              levels=c("1","2","3","4","5"),
+                              labels=c("Below College",
+                                "College",
+                                "Bachelor",
+                                "Master",
+                                "Doctor"), 
+                              ordered=TRUE)
+sal_dataV1$EnvironmentSatisfaction <- factor(sal_dataV1$Education, 
+                                            levels=c("1","2","3","4"),
+                                            labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                            ordered=TRUE)
+sal_dataV1$JobInvolvement <- factor(sal_dataV1$JobInvolvement, 
+                                             levels=c("1","2","3","4"),
+                                             labels=c("Low",
+                                                      "Medium",
+                                                      "High",
+                                                      "Very High"),
+                                             ordered=TRUE)
+sal_dataV1$JobSatisfaction <- factor(sal_dataV1$JobSatisfaction, 
+                                             levels=c("1","2","3","4"),
+                                             labels=c("Low",
+                                                      "Medium",
+                                                      "High",
+                                                      "Very High"),
+                                             ordered=TRUE)
+sal_dataV1$PerformanceRating <- factor(sal_dataV1$PerformanceRating, 
+                                     levels=c("1","2","3","4"),
+                                     labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                     ordered=TRUE)
+sal_dataV1$RelationshipSatisfaction <- factor(sal_dataV1$RelationshipSatisfaction, 
+                                     levels=c("1","2","3","4"),
+                                     labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                     ordered=TRUE)
+sal_dataV1$WorkLifeBalance <- factor(sal_dataV1$WorkLifeBalance, 
+                                     levels=c("1","2","3","4"),
+                                     labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                     ordered=TRUE)
+###################
+# For the next/final 2 factors, we don't know what the level means, just what they are
+###################
+sal_dataV1$JobLevel <- factor(sal_dataV1$JobLevel, 
+                                     levels=c("1","2","3","4","5"),
+                                     ordered=TRUE)
+sal_dataV1$StockOption <- factor(sal_dataV1$StockOption, 
+                              levels=c("0","1","2","3"),
+                              ordered=TRUE)
 
 #####################################################################
 # Quickly do a quick histogram for the factor variables
