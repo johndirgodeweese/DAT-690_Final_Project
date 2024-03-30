@@ -1,31 +1,197 @@
 ---
 title: "DAT-690 Final Project"
 author: "John Dirgo Deweese"
-date: "2024-03-18"
+date: "2024-03-31"
 output: html_document
+editor_options: 
+  markdown: 
+    wrap: 80
 ---
 
-```{r setup, include=FALSE}
+```{r doc_setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## Presentation of Final Project
 
-## R Markdown
+For this project, a dataset of employee information was given that
+included information on the employee's tenure with the company, in their
+current position, commuting information and much more. Most importantly,
+it contained current salary information and an amount that would be
+necessary to retain the employee. The goal is to be able to predict,
+based on the available data (including salary) what adjusted salary
+would be needed in order to effectively entice the employee to stay. To
+be able to accurately predict the modified salary at least 80% of the
+time would be considered success. This does not mean that every employee
+with a predicted salary would receive it -- pay decisions remain the
+purview of the manager and human resources. This is intended to give
+those individuals solid verified information upon which they can make
+their choices.
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r load-libraries, include = FALSE, message=FALSE,warning=FALSE,results='hide'}
+# Set up working directory
+setwd("G:/My Drive/24TW3 - DAT 690 - Capstone in Data Analytics/DAT-690 Final Project")
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# Put libraries you'll need at the start of this file
+# It just makes life easier
 
-```{r cars}
-summary(cars)
+#### Data Wrangling
+# Tidyverse contains ggplot2, tibble, tidyr, readr, 
+#    dplyr, stringr, purr, and forcats
+library(tidyverse)
+
+#library(smotefamily)       # SMOTE & Adasyn for balancing datasets
+#library(e1071)
+
+library(mltools)
+library(data.table)
+library(skimr)
+
+# Data Validator
+library(validate)
+
+# Plotting
+library(lattice)
+library(ggvis)
+#library(GGally)
+library(plotly)
+
+# Machine Learning
+library(neuralnet)
+library(NeuralNetTools)
+library(keras3)
+
+# Oversampling
+#library(ROSE)
+
+## arules = Association RULES including apriori
+#library(arules)
+#library(arulesViz)
+library(RColorBrewer)
+
+## Decision Trees and Random Forest
+# library(rpart)      # performing regression trees
+# library(rpart.plot) # plotting regression trees
+# library(ipred)      # bagging
+# library(randomForest) # basic implementation
+# library(ranger)       # a faster implementation of randomForest
+# library(partykit)
+
+
+# Machine Learning Evaluation
+library(caret)        # an aggregator package for performing many machine learning models
+library(h2o)          # an extremely fast java-based platform
+library(car)          # Companion to Applied Regression
+
+# Feature Selection Algorithm Package
+#library(Boruta)
+
+# Tidymodels includes broom, dials, infer, modeldata, parsnip, recipes,
+#     rsample, tune, workflows, workflowsets, yardstick
+library(tidymodels)
+library(corpcor)
+library(mctest)
+library(corrplot)
+library(ggcorrplot)
+library(pROC)
+library(ROCR)
+library(MASS)       # Modern Applied Statistics with S
+#library(C50)
+library(caTools)    # For Linear regression        
+#library(quantmod)
 ```
 
-## Including Plots
+```{r load-training-dataset, include = FALSE, message=FALSE,warning=FALSE,results='hide'}
+# Import training data file
+sal_dataV1 <- read_csv("data/EmployeeSalary_Data.csv", show_col_types = FALSE)
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+# We know that some of these are categorical variables (factors) even thought they are numeric
+# but we are not going to use the col_factor option on the read_csv in the beginning
+# We have a dictionary of the factors and their values, so we first want to make sure we don't
+# have out-of-range data.  Once the data quality has been checked we can convert to a factor
+# where that is appropriate.
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+### Raw Data (Let's Take a Peek)
+
+```{r skim-data}
+# Let's take a quick peek at the data, including distributions
+skim(sal_dataV1)
+```
+
+### Data Validation
+
+Right now, the data is all showing as numeric, even though looking at
+the data attributes, we can see that a lot of the data is actually
+categorical data, coded as numeric (like JobSatisfaction, which is
+ranked on a scale of 1 to 4). We will correct that later.
+
+For now, let's check out the data for any problems with the data itself.
+For example, are there gaps or missing pieces, are any of the instances
+of JobSatisfaction outside of the 1 to 4 range -- that sort of thing.
+
+The validations we will be doing are these:
+
+-   Check the entire dataframe for NA values
+
+-   Employee's age should be between 18 and 100
+
+-   Categorical values coded as numbers should be within their value
+    range
+
+    -   Categorical values and their ranges are:
+
+        | Data Attribute           | Range  |
+        |--------------------------|--------|
+        | Education                | 1 to 5 |
+        | JobInvolvement           | 1 to 4 |
+        | JobSatisfaction          | 1 to 4 |
+        | PerformanceRating        | 1 to 4 |
+        | RelationshipSatisfaction | 1 to 4 |
+        | WorkLifeBalance          | 1 to 4 |
+
+        : Categorical Attributes
+
+-   AverageOvertime must be zero or positive and shouldn't be over 40
+
+-   YearsAtCompany must be equal to or less than TotalWorkingYears
+
+-   YearsAtCompany must be greater than or equal to YearsInCurrentRole
+
+-   YearsAtCompany must be greater than or equal to
+    YearsWithCurrentManager
+
+```{r rule-check, include=FALSE}
+# Set up validation rules
+#
+# Rules: 
+#
+# Check the entire dataframe for NA (!is.na() - returns true if data exists)
+# Employees (Age) should be between 18 and 100
+# Categorical values coded as numbers should be within their value range
+# AverageOvertime must be positive and shouldn't be over 40
+# YearsAtCompany must be equal to or less than TotalWorkingYears
+# YearsAtCompany must be greater than or equal to YearsInCurrentRole
+# YearsAtCompany must be greater than or equal to YearsWithCurrentManager
+rules <- validator(CheckNA = !is.na(sal_dataV1),
+  CheckAge = in_range(sal_dataV1$Age, min = 18, max = 100),
+  CheckEducation = in_range(sal_dataV1$Education, min = 1, max = 5),
+  CheckJobInvolve = in_range(sal_dataV1$JobInvolvement, min = 1, max = 4),
+  CheckJobSatis = in_range(sal_dataV1$JobSatisfaction, min = 1, max = 4),
+  CheckPerfRating = in_range(sal_dataV1$PerformanceRating, min = 1, max = 4),
+  CheckRelSatis = in_range(sal_dataV1$RelationshipSatisfaction, min = 1, max = 4),
+  CheckWorkLife = in_range(sal_dataV1$WorkLifeBalance, min = 1, max = 4),
+  CheckAvgOT = in_range(sal_dataV1$AvgOverTime, min = 0, max = 40),
+  CheckTotWorkVsCompany = sal_dataV1$YearsAtCompany <= sal_dataV1$TotalWorkingYears,
+  CheckYrsCompVsCurRole = sal_dataV1$YearsAtCompany >= sal_dataV1$YearsInCurrentRole,
+  CheckYrsCompVsCurMgt = sal_dataV1$YearsAtCompany >= sal_dataV1$YearsWithCurrManager)
+
+#Confront' the data with rules, save results
+rule_check <- confront(sal_dataV1, rules)
+```
+
+```{r validation-results}
+summary(rule_check)
+```
+
+#### No Errors

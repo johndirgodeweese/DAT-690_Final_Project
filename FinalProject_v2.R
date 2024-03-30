@@ -132,6 +132,15 @@ factor_cols <- c("Education", "EnvironmentSatisfaction", "JobInvolvement",
 sal_dataV1[,factor_cols] <- lapply(sal_dataV1[,factor_cols], factor, ordered= TRUE)
 
 #####################################################################
+# Quickly do a quick histogram for the factor variables
+#####################################################################
+
+# Assuming your data is in a dataframe named 'data' with a factor column 'factor_attribute'
+ggplot(sal_dataV1, aes(x = Education)) + geom_bar(fill="blue") +
+  scale_fill_manual(labels=c("Below College","College","Bachelor","Master","Doctor"))
+
+
+#####################################################################
 # Now Create Some New Attributes That are More Useful
 # Average Time Per Company = Total Working Years /(Number Companies Worked + 1)
 #             Apparently 'Number of Companies Worked' doesn't include this one
@@ -156,7 +165,7 @@ sal_dataV1$RetentionPercentNeeded <- round(((sal_dataV1$DiffFromSalary/sal_dataV
 
 
 # For our correlation check, remove DiffFromSalary (but keep RetentionPercentNeeded, for now)
-sal_dataV1 <- subset(sal_dataV1, select = -c(DiffFromSalary))
+sal_dataV1 <- subset(sal_dataV1, select = -c(DiffFromSalary, AnnualIncomeNeeded))
 
 # Eliminate AGE because 1) multicollinearity with TotalWorkingYears, etc and
 # Also HUGE bias risk
@@ -197,7 +206,7 @@ data_standardize <- function(x, na.rm= TRUE) {
 # First let's NOT standardize the salary or the target variable because 
 # they are money and have actual meaning
 for(looper in numeric_cols) {
-  if(looper != 'CurrentSalary' && looper!='AnnualIncomeNeeded') {
+  if(looper != 'CurrentSalary' && looper!='RetentionPercentNeeded') {
     # Create a new name for the created standardized column    
     newcol_name <- paste(looper,"Std", sep="_")
     # Create a vector containing the standardized values
@@ -225,13 +234,13 @@ sal_num_pval <- cor_pmat(train_sal_data_nDF)
 # Correlation Plot!
 ggcorrplot(sal_num_corr, hc.order=TRUE, type="lower", lab=TRUE, p.mat=sal_num_pval)
 
-target_var <- 'AnnualIncomeNeeded'
+target_var <- 'RetentionPercentNeeded'
 
 # Get a list of the numeric variable names without the target variable
 # This will be used for the VIF and Stepwise AIC function
 
 num_cols_no_target <- colnames(train_sal_data_nDF)
-num_cols_no_target <- num_cols_no_target[!num_cols_no_target %in% c('AnnualIncomeNeeded','RetentionPercentNeeded_Std')]
+num_cols_no_target <- num_cols_no_target[!num_cols_no_target %in% c('RetentionPercentNeeded')]
 
 # Build the complete formula
 salLMformula <- as.formula(paste(target_var,paste(num_cols_no_target, collapse = " + "), sep = " ~"))
@@ -252,7 +261,7 @@ highest_VIF_name <- names(highest_VIF_location)
 # AIC = mathematical evaluation of how well the data fits the model used
 #       to generate the model
 
-stepwiseR <- stepAIC(lm(salLMformula,data=train_sal_data_nDF))
+stepwiseR <- MASS::stepAIC(lm(salLMformula,data=train_sal_data_nDF, direction="both"))
 summary(stepwiseR)
 
 ###
@@ -328,7 +337,7 @@ train_sal_data_DT <- one_hot(train_sal_data_DT, cols=new_factor_cols, dropCols =
 # Build final training database
 # Assembled from the attributes chosen in the stepwise regression (for numerics)
 # and the independence check (categoricals)
-train_db_field_list <- c("AnnualIncomeNeeded",selected_features,new_factor_cols)
+train_db_field_list <- c("RetentionPercentNeeded",selected_features,new_factor_cols)
 
 train_final_db <- train_sal_data[,c(train_db_field_list)]
 
@@ -339,13 +348,13 @@ train_final_db <- data.table(train_final_db)
 train_final_db <- one_hot(train_final_db, cols=new_factor_cols, dropCols = TRUE)
 
 # Let's try a basic linear regression model
-train_linear_reg <- lm(AnnualIncomeNeeded ~ ., data = train_final_db)
+train_linear_reg <- lm(RetentionPercentNeeded ~ ., data = train_final_db)
 
 # Let's try a GLM model
-train_glm <- glm(AnnualIncomeNeeded ~ ., data = train_final_db, family = gaussian)
+train_glm <- glm(RetentionPercentNeeded ~ ., data = train_final_db, family = gaussian)
 
 # Let's do a basic neural network
-train_nn <- neuralnet(AnnualIncomeNeeded ~ ., data = train_final_db, 
+train_nn <- neuralnet(RetentionPercentNeeded ~ ., data = train_final_db, 
                       hidden = c(10, 5), linear.output = FALSE)
 
 # Plot that bad boy out!
@@ -374,7 +383,7 @@ aug_lm_sal %>% dplyr::select(contains(".")) %>% dplyr::glimpse(78)
 # Graph it!
 gg_lm_sal_QQPlot <- train_final_db %>%
   # name the 'sample' the outcome variable (norm_y)
-  ggplot(mapping = aes(sample = AnnualIncomeNeeded)) +
+  ggplot(mapping = aes(sample = RetentionPercentNeeded)) +
   # add the stat_qq_band
   qqplotr::stat_qq_band(
     bandType = "pointwise",
