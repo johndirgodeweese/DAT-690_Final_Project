@@ -3,9 +3,6 @@ title: "DAT-690 Final Project"
 author: "John Dirgo Deweese"
 date: "2024-03-31"
 output: html_document
-editor_options: 
-  markdown: 
-    wrap: 80
 ---
 
 ```{r doc_setup, include=FALSE}
@@ -39,10 +36,6 @@ setwd("G:/My Drive/24TW3 - DAT 690 - Capstone in Data Analytics/DAT-690 Final Pr
 # Tidyverse contains ggplot2, tibble, tidyr, readr, 
 #    dplyr, stringr, purr, and forcats
 library(tidyverse)
-
-#library(smotefamily)       # SMOTE & Adasyn for balancing datasets
-#library(e1071)
-
 library(mltools)
 library(data.table)
 library(skimr)
@@ -53,33 +46,19 @@ library(validate)
 # Plotting
 library(lattice)
 library(ggvis)
-#library(GGally)
 library(plotly)
+library(RColorBrewer)
+library(gridExtra)
+library(corrplot)
+library(ggcorrplot)
 
 # Machine Learning
 library(neuralnet)
 library(NeuralNetTools)
 library(keras3)
 
-# Oversampling
-#library(ROSE)
-
-## arules = Association RULES including apriori
-#library(arules)
-#library(arulesViz)
-library(RColorBrewer)
-
-## Decision Trees and Random Forest
-# library(rpart)      # performing regression trees
-# library(rpart.plot) # plotting regression trees
-# library(ipred)      # bagging
-# library(randomForest) # basic implementation
-# library(ranger)       # a faster implementation of randomForest
-# library(partykit)
-
-
 # Machine Learning Evaluation
-library(caret)        # an aggregator package for performing many machine learning models
+library(caret)        # an aggregator package for performing many ML models
 library(h2o)          # an extremely fast java-based platform
 library(car)          # Companion to Applied Regression
 
@@ -91,14 +70,10 @@ library(car)          # Companion to Applied Regression
 library(tidymodels)
 library(corpcor)
 library(mctest)
-library(corrplot)
-library(ggcorrplot)
 library(pROC)
 library(ROCR)
 library(MASS)       # Modern Applied Statistics with S
-#library(C50)
 library(caTools)    # For Linear regression        
-#library(quantmod)
 ```
 
 ```{r load-training-dataset, include = FALSE, message=FALSE,warning=FALSE,results='hide'}
@@ -110,13 +85,6 @@ sal_dataV1 <- read_csv("data/EmployeeSalary_Data.csv", show_col_types = FALSE)
 # We have a dictionary of the factors and their values, so we first want to make sure we don't
 # have out-of-range data.  Once the data quality has been checked we can convert to a factor
 # where that is appropriate.
-```
-
-### Raw Data (Let's Take a Peek)
-
-```{r skim-data}
-# Let's take a quick peek at the data, including distributions
-skim(sal_dataV1)
 ```
 
 ### Data Validation
@@ -149,7 +117,10 @@ The validations we will be doing are these:
         | PerformanceRating        | 1 to 4 |
         | RelationshipSatisfaction | 1 to 4 |
         | WorkLifeBalance          | 1 to 4 |
-
+        | StockOption              | 0 to 3 |
+        | JobLevel                 | 1 to 5 |
+        | EnvironmentSatisfaction  | 1 to 4 |
+        
         : Categorical Attributes
 
 -   AverageOvertime must be zero or positive and shouldn't be over 40
@@ -174,24 +145,127 @@ The validations we will be doing are these:
 # YearsAtCompany must be greater than or equal to YearsInCurrentRole
 # YearsAtCompany must be greater than or equal to YearsWithCurrentManager
 rules <- validator(CheckNA = !is.na(sal_dataV1),
-  CheckAge = in_range(sal_dataV1$Age, min = 18, max = 100),
-  CheckEducation = in_range(sal_dataV1$Education, min = 1, max = 5),
-  CheckJobInvolve = in_range(sal_dataV1$JobInvolvement, min = 1, max = 4),
-  CheckJobSatis = in_range(sal_dataV1$JobSatisfaction, min = 1, max = 4),
-  CheckPerfRating = in_range(sal_dataV1$PerformanceRating, min = 1, max = 4),
-  CheckRelSatis = in_range(sal_dataV1$RelationshipSatisfaction, min = 1, max = 4),
-  CheckWorkLife = in_range(sal_dataV1$WorkLifeBalance, min = 1, max = 4),
-  CheckAvgOT = in_range(sal_dataV1$AvgOverTime, min = 0, max = 40),
-  CheckTotWorkVsCompany = sal_dataV1$YearsAtCompany <= sal_dataV1$TotalWorkingYears,
-  CheckYrsCompVsCurRole = sal_dataV1$YearsAtCompany >= sal_dataV1$YearsInCurrentRole,
-  CheckYrsCompVsCurMgt = sal_dataV1$YearsAtCompany >= sal_dataV1$YearsWithCurrManager)
+    CheckAge = in_range(sal_dataV1$Age, min = 18, max = 100),
+    CheckEducation = in_range(sal_dataV1$Education, min = 1, max = 5),
+    CheckJobInvolve = in_range(sal_dataV1$JobInvolvement, min = 1, max = 4),
+    CheckJobSatis = in_range(sal_dataV1$JobSatisfaction, min = 1, max = 4),
+    CheckPerfRating = in_range(sal_dataV1$PerformanceRating, min = 1, max = 4),
+    CheckRelSatis = in_range(sal_dataV1$RelationshipSatisfaction, min = 1, max = 4),
+    CheckWorkLife = in_range(sal_dataV1$WorkLifeBalance, min = 1, max = 4),
+    CheckStockOpt = in_range(sal_dataV1$StockOption, min = 0, max =3),
+    CheckJobLevel = in_range(sal_dataV1$JobLevel, min = 1, max = 5),
+    CheckEnvSatis = in_range(sal_dataV1$EnvironmentSatisfaction, min = 1, max = 4),
+    CheckAvgOT = in_range(sal_dataV1$AvgOverTime, min = 0, max = 40),
+    CheckTotWorkVsCompany = sal_dataV1$YearsAtCompany <= sal_dataV1$TotalWorkingYears,
+    CheckYrsCompVsCurRole = sal_dataV1$YearsAtCompany >= sal_dataV1$YearsInCurrentRole,
+    CheckYrsCompVsCurMgt = sal_dataV1$YearsAtCompany >= sal_dataV1$YearsWithCurrManager)
 
 #Confront' the data with rules, save results
 rule_check <- confront(sal_dataV1, rules)
 ```
 
 ```{r validation-results}
-summary(rule_check)
+validation_check <- summary(rule_check)
+
+if(sum(validation_check$fails == 0)) {
+  print("All validation checks passed without error")
+  # The colFalse function returns number of FALSE values in the column
+  # if that matches the number of entries in the matrix, then none were true
+  temp_matrix <- matrix(validation_check$warning)
+  temp_no_warning_count <- Rfast::colFalse(temp_matrix[,1])
+  if(temp_no_warning_count = length(temp_matrix)) {
+    print("There were no warnings")
+  }
+  rm(temp_no_warning_count,temp_matrix)
+} else {
+  print("There were",sum(validation_check$fails,"errors in the data validation"))
+  print("It is recommended that this process be stopped and the data checked for errors")
+}
+
 ```
 
 #### No Errors
+
+There are no missing values or anything out of range in our dataset.  This a very good thing so that we can trust that the data is accurate.
+
+At this time, we backup the validated dataset and remove the EMPID field since we know that it will not be useful in the analysis.
+
+While our categorical attributes are still numeric, let's run a correlation analysis on ALL the attributes to see what the most likely candidates are for retention. We will not 
+neccessarily eliminate anything yet, but we will identify the most likely ones to retain.
+
+
+
+
+We convert the the categorical attributes specified earlier into ordinals since their values do have a order and meaning to them.  For the seven (out of nine) that have rankings defined in our data dictionary (such as "1" meaning "Low", "2" meaning "Medium", etc), we also add those rankings to the levels. The two that do not have a defined ranking (JobLevel and StockOption) are converted to ordinals, but their numeric values are not modified.  We are operating under the assumption that higher numbers are high Job Levels and Stock Option amounts, but we are avoiding taking that assumption too far. 
+
+```{r create-ordinals}
+####################################################################
+# OK, now that we've done this, let's start doing some modification and analysis
+# First, let's convert the factors to factors...
+
+factor_cols <- c("Education", "EnvironmentSatisfaction", "JobInvolvement",
+                 "JobLevel", "JobSatisfaction", "PerformanceRating", 
+                 "RelationshipSatisfaction","StockOption","WorkLifeBalance")
+
+
+sal_dataV1$Education <- factor(sal_dataV1$Education, 
+                              levels=c("1","2","3","4","5"),
+                              labels=c("Below College",
+                                "College",
+                                "Bachelor",
+                                "Master",
+                                "Doctor"), 
+                              ordered=TRUE)
+sal_dataV1$EnvironmentSatisfaction <- factor(sal_dataV1$Education, 
+                                            levels=c("1","2","3","4"),
+                                            labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                            ordered=TRUE)
+sal_dataV1$JobInvolvement <- factor(sal_dataV1$JobInvolvement, 
+                                             levels=c("1","2","3","4"),
+                                             labels=c("Low",
+                                                      "Medium",
+                                                      "High",
+                                                      "Very High"),
+                                             ordered=TRUE)
+sal_dataV1$JobSatisfaction <- factor(sal_dataV1$JobSatisfaction, 
+                                             levels=c("1","2","3","4"),
+                                             labels=c("Low",
+                                                      "Medium",
+                                                      "High",
+                                                      "Very High"),
+                                             ordered=TRUE)
+sal_dataV1$PerformanceRating <- factor(sal_dataV1$PerformanceRating, 
+                                     levels=c("1","2","3","4"),
+                                     labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                     ordered=TRUE)
+sal_dataV1$RelationshipSatisfaction <- factor(sal_dataV1$RelationshipSatisfaction, 
+                                     levels=c("1","2","3","4"),
+                                     labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                     ordered=TRUE)
+sal_dataV1$WorkLifeBalance <- factor(sal_dataV1$WorkLifeBalance, 
+                                     levels=c("1","2","3","4"),
+                                     labels=c("Low",
+                                              "Medium",
+                                              "High",
+                                              "Very High"),
+                                     ordered=TRUE)
+###################
+# For the next/final 2 factors, we don't know what the level means, just what they are
+###################
+sal_dataV1$JobLevel <- factor(sal_dataV1$JobLevel, 
+                                     levels=c("1","2","3","4","5"),
+                                     ordered=TRUE)
+sal_dataV1$StockOption <- factor(sal_dataV1$StockOption, 
+                              levels=c("0","1","2","3"),
+                              ordered=TRUE)
+
+```
