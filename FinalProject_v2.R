@@ -311,6 +311,7 @@ trn_nn_residuals <- train_nn$residuals
 trn_nn_mse <- mean(trn_nn_residuals^2)
 
 trn_nn_sse <- sum(trn_nn_residuals^2)
+trn_std_error_nn <- sqrt(trn_nn_mse)
 trn_n <- nrow(fnl_trn_DT)
 trn_p <- ncol(fnl_trn_DT)
 trn_neural_AIC <- (trn_n*log(trn_nn_sse/trn_n)) + 2*trn_p
@@ -542,20 +543,20 @@ tst_n <- nrow(fnl_tst_DT)
 tst_p <- ncol(fnl_tst_DT)
 tst_nn_AIC <- (tst_n*log(tst_nn_sse/tst_n)) + 2*tst_p
 
-tst_accuracy$Within_10_Percent <- tst_accuracy$Difference <= 10
-tst_accuracy$Within_15_Percent <- tst_accuracy$Difference <= 15
-tst_accuracy$Within_20_Percent <- tst_accuracy$Difference <= 20
+tst_nn_accuracy$Within_10_Percent <- tst_nn_accuracy$Difference <= 10
+tst_nn_accuracy$Within_15_Percent <- tst_nn_accuracy$Difference <= 15
+tst_nn_accuracy$Within_20_Percent <- tst_nn_accuracy$Difference <= 20
 
-tst_percent_within_10 <- mean(tst_accuracy$Within_10_Percent) * 100
-tst_percent_within_15 <- mean(tst_accuracy$Within_15_Percent) * 100
-tst_percent_within_20 <- mean(tst_accuracy$Within_20_Percent) * 100
+tst_percent_within_10 <- mean(tst_nn_accuracy$Within_10_Percent) * 100
+tst_percent_within_15 <- mean(tst_nn_accuracy$Within_15_Percent) * 100
+tst_percent_within_20 <- mean(tst_nn_accuracy$Within_20_Percent) * 100
 
-tst_NN_plot2 <- ggplot(tst_accuracy, aes(x = Actual_Pct, y = Predict_Pct))+ geom_point() + geom_abline(aes(intercept = 0, slope = 1)) +
+tst_NN_plot2 <- ggplot(tst_nn_accuracy, aes(x = Actual_Pct, y = Predict_Pct))+ geom_point() + geom_abline(aes(intercept = 0, slope = 1)) +
   labs(y= "Predicted Retention Percent", x = "True Retention Percent")
 
 tst_NN_plot2
 
-histPercent(tst_accuracy$Difference, xlab="Percentage Difference (Actual vs Predicted)", 
+histPercent(tst_nn_accuracy$Difference, xlab="Percentage Difference (Actual vs Predicted)", 
             main="Testing Data Accuracy of Neural Network Model",
               xlim=c(0,90), ylim=c(0,60), col="green", border="black")
 
