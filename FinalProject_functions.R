@@ -1,4 +1,5 @@
 do_validation_check <- function(data_frame) {
+  data_frame <- trn_dataV1
   # Set up validation rules
   #
   # Rules: 
@@ -33,7 +34,7 @@ do_validation_check <- function(data_frame) {
   
   validation_check <- summary(rule_check)
   
-  return(sum(validation_check$fails))
+  return(list(validation_errors = sum(validation_check$fails),validation_warnings = (sum(validation_check$warning, na.rm = TRUE) - 1)))
 }  
 
 do_feature_engineering <- function(data_frame) {
@@ -201,6 +202,13 @@ do_factor_conversion <- function(data_frame) {
   return(data_frame)
 }
 
+################################################################
+# Create a Z-Score standardization routine for the numeric
+# attributes
+#
+# <new x> = (<old x> - <mean X>)/ <std dev x>
+# 
+###############################################################
 # For each item
 data_standardize <- function(x, na.rm= TRUE) {
   return((x - mean(x))/sd(x))
@@ -212,11 +220,16 @@ do_standardize_numerics <- function(data_frame) {
 # Extract the numeric variables names
 numeric_cols <- names(data_frame)[sapply(data_frame, is.numeric)]
 
-# First let's NOT standardize the salary or the target variable because 
-# they are money and have actual meaning
+# Store and return the mean and standard deviation of the 
+# Current Salary and Retention Percent Needed so that the values
+# can be "un-scaled" after predicting
+
+mean_cur_sal <- mean(data_frame$CurrentSalary)
+sd_cur_sal <- sd(data_frame$CurrentSalary)
+mean_ret_pct <- mean(data_frame$RetentionPercentNeeded)
+sd_ret_pct <- sd(data_frame$RetentionPercentNeeded)
+
 for(looper in numeric_cols) {
-  if(looper != 'CurrentSalary' && looper!='RetentionPercentNeeded' &&
-     looper != 'Retention_Ratio') {
     # Create a new name for the created standardized column    
     newcol_name <- paste(looper,"Std", sep="_")
     # Create a vector containing the standardized values
@@ -227,9 +240,11 @@ for(looper in numeric_cols) {
     colnames(data_frame)[which(names(data_frame) == "new_vector")] <- newcol_name
     # Remove the old non-standardized data (NEW DATAFRAME ONLY)
     data_frame <- data_frame[, names(data_frame) != looper]
-  }
 }
-return(data_frame)
+
+return(list(data_frame = data_frame, mean_cur_sal = mean_cur_sal, 
+            sd_cur_sal = sd_cur_sal, mean_ret_pct = mean_ret_pct, 
+            sd_ret_pct = sd_ret_pct))
 }
 
 do_categorical_independence_check <- function(data_frame) {
@@ -282,4 +297,11 @@ do_categorical_independence_check <- function(data_frame) {
   DependentVariables <- IndTestResults_df[IndTestResults_df$Ind_Test_PVal <= 0.05, ]
   
   return(DependentVariables)
+}
+
+histPercent <- function(x, ...) {
+  H <- hist(x, plot = FALSE)
+  H$density <- with(H, 100 * density* diff(breaks)[1])
+  labs <- paste(round(H$density), "%", sep="")
+  plot(H, freq = FALSE, labels = labs,...)
 }

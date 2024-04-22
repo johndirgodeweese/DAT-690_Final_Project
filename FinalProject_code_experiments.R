@@ -147,3 +147,74 @@
 
 # Build the complete formula
 #finalNNformula <- as.formula(paste(target_var,paste(dt_cols_no_target, collapse = " + "), sep = " ~"))
+
+
+#Boruta graph
+plot(boruta.train, xlab = "", xaxt = "n")
+lz<-lapply(1:ncol(boruta.train$ImpHistory),function(i)
+boruta.train$ImpHistory[is.finite(boruta.train$ImpHistory[,i]),i])
+names(lz) <- colnames(boruta.train$ImpHistory)
+Labels <- sort(sapply(lz,median))
+axis(side = 1,las=2,labels = names(Labels),
+  at = 1:ncol(boruta.train$ImpHistory), cex.axis = 0.7)
+
+# Let's examine the results of the linear model
+# Let's do some diagnostics and visualization of the LR model
+
+# Let's 'tidy' up our linear model
+# tidy(trn_linear_reg)
+# 
+# # Add some additional useful fields
+# augment(trn_linear_reg)
+# 
+# # And look at the overall model stats
+# glance(trn_linear_reg)
+# 
+# # Add the column augments to see how the Q-Q plot looks
+# aug_lm_sal <- broom::augment_columns(trn_linear_reg, data = fnl_trn_DT)
+# 
+# aug_lm_sal %>% dplyr::select(contains(".")) %>% dplyr::glimpse(78)
+
+# Graph it!
+# gg_lm_sal_QQPlot <- aug_lm_sal %>%
+#   # name the 'sample' the outcome variable (norm_y)
+#   ggplot(mapping = aes(sample = RetentionPercentNeeded_Std)) +
+#   # add the stat_qq_band
+#   qqplotr::stat_qq_band(
+#     bandType = "pointwise",
+#     mapping = aes(fill = "Normal"), alpha = 0.5,
+#     show.legend = FALSE
+#   ) +
+#   # add the lines
+#   qqplotr::stat_qq_line() +
+#   # add the points
+#   qqplotr::stat_qq_point() +
+#   # add labs
+#   ggplot2::labs(
+#     x = "Theoretical Quantiles",
+#     y = "Sample Residuals",
+#     title = "Normal Q-Q plot for Salary Data (Linear Regression)"
+#   )
+# gg_lm_sal_QQPlot
+# 
+# trn_lm_plot2 <- ggplot(trn_lm_accuracy, aes(x = Descaled_Actual, y = Descaled_Predicted))+ geom_point() + geom_abline(aes(intercept = 0, slope = 1)) +
+#   labs(y= "Predicted Retention Percent", x = "True Retention Percent")
+# 
+# trn_lm_plot2
+# 
+# abline(0,1)
+
+# hist(trn_lm_accuracy$Difference, xlab="Percentage Difference (Actual vs Predicted)", 
+#      main="Training Data Accuracy of Linear Regression Model", xlim=c(0,60), 
+#      ylim=c(0,300), breaks=10, col="blue", border="black")
+
+# ggplot(trn_lin_reg_act_vs_pred, aes(x=Descaled_Actual, y = Descaled_Predicted))  + 
+#   geom_point(color="red")  +  
+#   geom_smooth(method="lm")  + 
+#   ggtitle("Training Linear Regression - Actual vs Predicted") +
+#   xlab("Actual") + 
+#   ylab("Predicted")
+
+hist(trn_nn_accuracy$Difference, xlab="Percentage Difference (Actual vs Predicted)", 
+     main="Training Data Accuracy of Neural Network Model", xlim=c(0,60), ylim=c(0,700),
+     breaks=10, col="blue", border="black")
